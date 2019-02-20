@@ -96,7 +96,7 @@ class PMF(BaseEstimator, ClassifierMixin):
                 golds = np.append(golds, batch_golds)
 
                 # calculate gradients
-                error = pred - batch_golds + mean_rating
+                error = pred - batch_golds + self.mean_rating_
                 grad_u = np.multiply(error[:, np.newaxis], self.V[batch_item_ids, :]) + self.lambda_u * self.U[batch_user_ids, :]
                 grad_v = np.multiply(error[:, np.newaxis], self.U[batch_user_ids, :]) + self.lambda_v * self.V[batch_item_ids, :]
 
@@ -122,7 +122,7 @@ class PMF(BaseEstimator, ClassifierMixin):
 
             lr = lr * self.red_factor
             
-            error = predictions + mean_rating - golds
+            error = predictions + self.mean_rating_ - golds
             rmse = np.linalg.norm(error) / np.sqrt(num_train)
 
             if epoch % 10 == 0 and self.verbose:
