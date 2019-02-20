@@ -62,11 +62,11 @@ class PMF(BaseEstimator, ClassifierMixin):
             num_batches += 1  
 
         self.U = 0.1 * np.random.randn(self.num_user, self.D) # user vectors
-        self.V = 0.1 * np.random.randn(self.num_item, self.D) # product vectors
+        self.V = 0.1 * np.random.randn(self.num_item, self.D) # item vectors
 
         mask_u = np.zeros((self.num_user, self.D))
         mask_v = np.zeros((self.num_item, self.D))
-        #self.mean_rating_ = np.mean(y)
+        self.mean_rating_ = np.mean(y)
 
         best_rmse = 10000
         waiting = 0
@@ -96,33 +96,30 @@ class PMF(BaseEstimator, ClassifierMixin):
                 golds = np.append(golds, batch_golds)
 
                 # calculate gradients
-                error = pred - batch_golds #+ self.mean_rating_
-                grad_u = np.multiply(error[:, np.newaxis], self.V[batch_item_ids, :]) + self.lambda_u * self.U[batch_user_ids, :]
-                grad_v = np.multiply(error[:, np.newaxis], self.U[batch_user_ids, :]) + self.lambda_v * self.V[batch_item_ids, :]
+                error = pred - batch_golds + self.mean_rating_
+                grad_u = 2*np.multiply(error[:, np.newaxis], self.V[batch_item_ids, :]) + self.lambda_u * self.U[batch_user_ids, :]
+                grad_v = 2*np.multiply(error[:, np.newaxis], self.U[batch_user_ids, :]) + self.lambda_v * self.V[batch_item_ids, :]
 
                 # print(grad_u)
                 # print(">", grad_v)
 
                 # update parameters with masking
-                t = 0
-                for user_id in batch_user_ids:
+                for t,user_id in enumerate(batch_user_ids):
                     mask_u[user_id] = grad_u[t]
                     t+=1
 
-                t = 0
-                for item_id in batch_item_ids:
+                for t,item_id in enumerate(batch_item_ids):
                     mask_v[item_id] = grad_v[t]
-                    t+=1
 
-                mask_u = np.clip(mask_u, -3, 3)
-                mask_v = np.clip(mask_v, -3, 3)
+                #mask_u = np.clip(mask_u, -3, 3)
+                #mask_v = np.clip(mask_v, -3, 3)
 
                 self.U = self.U - lr * mask_u
                 self.V = self.V - lr * mask_v
 
             lr = lr * self.red_factor
             
-            error = predictions -golds#+ self.mean_rating_ - golds
+            error = predictions -golds+ self.mean_rating_
             rmse = np.linalg.norm(error) / np.sqrt(num_train)
 
             if epoch % 10 == 0 and self.verbose:
@@ -137,7 +134,7 @@ class PMF(BaseEstimator, ClassifierMixin):
                           time.time()-start_time, "total epoch=", epoch)
                 break
 
-            if abs(best_rmse - rmse) > 1e-06 :
+            if abs(best_rmse - rmse) > self.tol:
                 best_rmse = rmse
                 waiting = 0
             else:
@@ -182,4 +179,4 @@ class PMF(BaseEstimator, ClassifierMixin):
             pred = np.sum(np.multiply(self.U[batch_user_ids, :], self.V[batch_item_ids, :]), axis=2).squeeze()
             predictions = np.append(predictions, pred)
             
-        return predictions#+self.mean_rating_
+        return predictions+self.mean_rating_
