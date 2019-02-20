@@ -97,8 +97,8 @@ class PMF(BaseEstimator, ClassifierMixin):
 
                 # calculate gradients
                 error = pred - batch_golds + self.mean_rating_
-                grad_u = 2*np.multiply(error[:, np.newaxis], self.V[batch_item_ids, :]) + self.lambda_u * self.U[batch_user_ids, :]
-                grad_v = 2*np.multiply(error[:, np.newaxis], self.U[batch_user_ids, :]) + self.lambda_v * self.V[batch_item_ids, :]
+                grad_u = np.multiply(error[:, np.newaxis], self.V[batch_item_ids, :]) + self.lambda_u * self.U[batch_user_ids, :]
+                grad_v = np.multiply(error[:, np.newaxis], self.U[batch_user_ids, :]) + self.lambda_v * self.V[batch_item_ids, :]
 
                 # print(grad_u)
                 # print(">", grad_v)
