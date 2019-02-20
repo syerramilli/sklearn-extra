@@ -111,8 +111,8 @@ class PMF(BaseEstimator, ClassifierMixin):
                 for t,item_id in enumerate(batch_item_ids):
                     mask_v[item_id] = grad_v[t]
 
-                #mask_u = np.clip(mask_u, -3, 3)
-                #mask_v = np.clip(mask_v, -3, 3)
+                mask_u = np.clip(mask_u, -3, 3)
+                mask_v = np.clip(mask_v, -3, 3)
 
                 self.U = self.U - lr * mask_u
                 self.V = self.V - lr * mask_v
