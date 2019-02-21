@@ -1,11 +1,9 @@
 import numpy as np
-import time
-import copy
 from sklearn.base import BaseEstimator, ClassifierMixin
 
 class PMF(BaseEstimator, ClassifierMixin):
     def __init__(self, D=10, lr=1, lambda_u=0.1, lambda_v=0.1, 
-                 max_epoch=20, batch_size=1000, num_user=1, num_item=1,
+                 max_epoch=20, batch_size=128, num_user=1, num_item=1,
                  tol = 1e-6, red_factor= 0.8,
                  verbose=False,random_state=None):
         self.__name__ = "PMF"
@@ -32,8 +30,6 @@ class PMF(BaseEstimator, ClassifierMixin):
         self.U = None # user vectors
         self.V = None # product vectors
 
-        #self.rmse_train = []
-        #self.rmse_test = []
 
     def fit(self, X, y):
         """A reference implementation of a fitting function
@@ -50,59 +46,48 @@ class PMF(BaseEstimator, ClassifierMixin):
             Returns self.
         """
 
-        start_time = time.time()
-
-        num_train = X.shape[0]
-
-        epoch = 0
-        num_batches = num_train // self.batch_size
-
-        if num_train % self.batch_size != 0:
-            num_batches += 1  
-
-        self.U = 0.1 * self.rng.randn(self.num_user, self.D) # user vectors
-        self.V = 0.1 * self.rng.randn(self.num_item, self.D) # item vectors
+        n_samples = X.shape[0]
+        
+        self.U =  0.1 * self.rng.randn(self.num_user, self.D) # user vectors
+        self.V =  0.1 * self.rng.randn(self.num_item, self.D) # item vectors
 
         mask_u = np.zeros((self.num_user, self.D))
         mask_v = np.zeros((self.num_item, self.D))
         self.mean_rating_ = np.mean(y)
-
-        best_rmse = 10000
-        waiting = 0
+        self.min_rating_ = np.min(y)
+        self.max_rating_ = np.max(y)
         
-        lr = copy.copy(self.lr)
+        lr = self.lr*1
         
-        while epoch < self.max_epoch:
-            epoch += 1
-
+        for epoch in range(self.max_epoch):
             shuffled_ids = np.arange(X.shape[0])
             self.rng.shuffle(shuffled_ids)
-
-            predictions = np.array([])
-            golds = np.array([])
-
-            for i in range(num_batches):   
-                batch_ids = np.arange(self.batch_size * i, min(num_train, self.batch_size * (i + 1)))
-                batch_size = len(batch_ids)
-
-                batch_user_ids = np.array(X[shuffled_ids[batch_ids], 0], dtype='int32')
-                batch_item_ids = np.array(X[shuffled_ids[batch_ids], 1], dtype='int32')
-                batch_golds = np.array(y[shuffled_ids[batch_ids]], dtype='int32')
-
-                # compute objective function
-                pred = np.sum(np.multiply(self.U[batch_user_ids, :], self.V[batch_item_ids, :]), axis=1)                
-                predictions = np.append(predictions, pred)
-                golds = np.append(golds, batch_golds)
-
-                # calculate gradients
-                error = pred - batch_golds + self.mean_rating_
-                grad_u = np.multiply(error[:, np.newaxis], self.V[batch_item_ids, :]) + self.lambda_u * self.U[batch_user_ids, :]
-                grad_v = np.multiply(error[:, np.newaxis], self.U[batch_user_ids, :]) + self.lambda_v * self.V[batch_item_ids, :]
-
+            
+            for i in range(0,n_samples,self.batch_size):
+                batch_size = min(self.batch_size,n_samples-i)
+                batch_user_ids = X[shuffled_ids[i:i+batch_size],0]
+                batch_item_ids = X[shuffled_ids[i:i+batch_size],1]
+                ratings = y[shuffled_ids[i:i+batch_size]] - self.mean_rating_ 
+                
+                # predictions and error
+                pred_out = np.sum(np.multiply(self.U[batch_user_ids, :], 
+                                              self.V[batch_item_ids, :]), 
+                                    axis=1)
+                error = pred_out-ratings
+                
+                # compute gradients
+                grad_u = np.multiply(error[:, np.newaxis], 
+                                     self.V[batch_item_ids, :]) +\
+                                     self.lambda_u * self.U[batch_user_ids, :]
+                grad_v = np.multiply(error[:, np.newaxis],
+                                     self.U[batch_user_ids, :]) +\
+                                     self.lambda_v * self.V[batch_item_ids, :]
+                
                 # update parameters with masking
+                mask_u = np.zeros((self.num_user, self.D))
+                mask_v = np.zeros((self.num_item, self.D))
                 for t,user_id in enumerate(batch_user_ids):
                     mask_u[user_id] = grad_u[t]
-                    t+=1
 
                 for t,item_id in enumerate(batch_item_ids):
                     mask_v[item_id] = grad_v[t]
@@ -113,37 +98,8 @@ class PMF(BaseEstimator, ClassifierMixin):
                 self.U = self.U - lr * mask_u
                 self.V = self.V - lr * mask_v
 
-            lr = lr * self.red_factor
+            #lr = lr * self.red_factor
             
-            error = predictions -golds+ self.mean_rating_
-            rmse = np.linalg.norm(error) / np.sqrt(num_train)
-
-            if epoch % 10 == 0 and self.verbose:
-                print("Epoch:",epoch, "rmse:", rmse)
-
-            if np.isnan(rmse):
-                if self.verbose:
-                    print("early stop - nan")
-                    print("best train rmse:", best_rmse, "for D=",self.D, 
-                          "lr=", self.lr, "lambda_u=", self.lambda_u, 
-                          "lambda_v=", self.lambda_v, "train time=", 
-                          time.time()-start_time, "total epoch=", epoch)
-                break
-
-            if abs(best_rmse - rmse) > self.tol:
-                best_rmse = rmse
-                waiting = 0
-            else:
-                waiting+=1
-
-            if waiting >= 2 or epoch == self.max_epoch:
-                if self.verbose:
-                    print("best train rmse:", best_rmse, "for D=",self.D, 
-                          "lr=", self.lr, "lambda_u=", self.lambda_u, 
-                          "lambda_v=", self.lambda_v, "train time=", 
-                          time.time()-start_time, "total epoch=", epoch)
-                break
-                
         return self
 
     def predict(self, X):
@@ -157,22 +113,13 @@ class PMF(BaseEstimator, ClassifierMixin):
         y : array of shape = [n_samples]
             Returns :math:`x^2` where :math:`x` is the first column of `X`.
         """
-
-        num_test = len(X)
-        eval_num_batches = num_test // self.batch_size
-        if num_test % self.batch_size != 0:
-            eval_num_batches += 1
-
-        predictions = np.array([])
-
-        for i in range(eval_num_batches):
-            batch_ids = np.arange(self.batch_size * i, min(num_test, self.batch_size * (i + 1)))
-
-            batch_user_ids = np.array(X[[batch_ids], 0], dtype='int32')
-            batch_item_ids = np.array(X[[batch_ids], 1], dtype='int32')
-
-            # print(np.multiply(self.U[batch_user_ids, :], self.V[batch_item_ids, :]).shape)
-            pred = np.sum(np.multiply(self.U[batch_user_ids, :], self.V[batch_item_ids, :]), axis=2).squeeze()
-            predictions = np.append(predictions, pred)
-            
-        return predictions+self.mean_rating_
+        
+        n_samples = X.shape[0]
+        y_pred = self.mean_rating_*np.ones(n_samples)
+        for i in np.arange(n_samples):
+            if X[i,0] < self.num_user and X[i,1] < self.num_item:
+                y_pred[i] += np.dot(self.U[X[i,0],:],self.V[X[i,1],:])
+                y_pred[i] = np.clip(y_pred[i],self.min_rating_,
+                      self.max_rating_)
+                
+        return y_pred
