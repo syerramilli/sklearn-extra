@@ -26,7 +26,6 @@ class PMF(BaseEstimator, ClassifierMixin):
             self.rng = np.random.RandomState(np.random.randint(0,2e+4))
         else:
             self.rng = random_state
-            
         
         self.verbose = verbose
 
@@ -61,8 +60,8 @@ class PMF(BaseEstimator, ClassifierMixin):
         if num_train % self.batch_size != 0:
             num_batches += 1  
 
-        self.U = 0.1 * np.random.randn(self.num_user, self.D) # user vectors
-        self.V = 0.1 * np.random.randn(self.num_item, self.D) # item vectors
+        self.U = 0.1 * self.rng.randn(self.num_user, self.D) # user vectors
+        self.V = 0.1 * self.rng.randn(self.num_item, self.D) # item vectors
 
         mask_u = np.zeros((self.num_user, self.D))
         mask_v = np.zeros((self.num_item, self.D))
@@ -77,7 +76,7 @@ class PMF(BaseEstimator, ClassifierMixin):
             epoch += 1
 
             shuffled_ids = np.arange(X.shape[0])
-            np.random.shuffle(shuffled_ids)
+            self.rng.shuffle(shuffled_ids)
 
             predictions = np.array([])
             golds = np.array([])
@@ -99,9 +98,6 @@ class PMF(BaseEstimator, ClassifierMixin):
                 error = pred - batch_golds + self.mean_rating_
                 grad_u = np.multiply(error[:, np.newaxis], self.V[batch_item_ids, :]) + self.lambda_u * self.U[batch_user_ids, :]
                 grad_v = np.multiply(error[:, np.newaxis], self.U[batch_user_ids, :]) + self.lambda_v * self.V[batch_item_ids, :]
-
-                # print(grad_u)
-                # print(">", grad_v)
 
                 # update parameters with masking
                 for t,user_id in enumerate(batch_user_ids):
